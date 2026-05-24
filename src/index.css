@@ -1,0 +1,72 @@
+@import "tailwindcss";
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@theme {
+  --color-surface-base: #0B0E14;
+  --color-surface-panel: #131720;
+  --color-surface-card: #1C2132;
+  --color-surface-hover: #242A3A;
+
+  --color-fg: #E0E6F0;
+  --color-fg-muted: #8892A4;
+  --color-fg-subtle: #4A5568;
+
+  --color-ch1: #7EB8F7;
+  --color-ch2: #F7C97E;
+  --color-ch3: #7EF7B8;
+  --color-ch4: #C07EF7;
+  --color-accent: #7EB8F7;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #0B0E14;
+  color: #E0E6F0;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+  overflow: hidden;
+}
+
+.u-legend { display: none !important; }
+.u-over { cursor: crosshair; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+input[type=range] {
+  -webkit-appearance: none;
+  height: 2px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 1px;
+  outline: none;
+  width: 100%;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--thumb-color, #7EB8F7);
+  cursor: pointer;
+  margin-top: -5px;
+}
