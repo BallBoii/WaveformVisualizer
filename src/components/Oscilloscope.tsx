@@ -33,7 +33,7 @@ const btnBase: React.CSSProperties = {
 export function Oscilloscope() {
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
-  const { channels, globalConfig } = useChannelStore()
+  const { channels, globalConfig, displayMode, setDisplayMode } = useChannelStore()
 
   const enabledChannels = useMemo(() => channels.filter((ch) => ch.config.enabled), [channels])
 
@@ -41,11 +41,14 @@ export function Oscilloscope() {
     const { sampleRate, recordLength } = globalConfig
     const time = generateTimeAxis(sampleRate, recordLength)
     const series: (Float64Array | number[])[] = [time]
-    enabledChannels.forEach((ch) =>
-      series.push(generateSamples(ch.config, sampleRate, recordLength))
-    )
+    enabledChannels.forEach((ch) => {
+      const cfg = displayMode === 'theoretical'
+        ? { ...ch.config, noiseLevel: 0 }
+        : ch.config
+      series.push(generateSamples(cfg, sampleRate, recordLength))
+    })
     return series as uPlot.AlignedData
-  }, [enabledChannels, globalConfig])
+  }, [enabledChannels, globalConfig, displayMode])
 
   // Zoom & pan — refs for stable closure access, state only for rendering
   const [xZoom, setXZoomState] = useState(1)
@@ -124,7 +127,11 @@ export function Oscilloscope() {
     ],
     series: [
       {},
-      ...enabledChannels.map((ch) => ({ stroke: ch.color, width: 1.5 })),
+      ...enabledChannels.map((ch) =>
+        displayMode === 'theoretical'
+          ? { stroke: ch.color, width: 2, dash: [6, 3] }
+          : { stroke: ch.color, width: 1.5 }
+      ),
     ],
   })
 
@@ -160,7 +167,7 @@ export function Oscilloscope() {
     createOrResize(r.width, r.height)
 
     return () => { ro.disconnect(); plotInstance?.destroy(); plotRef.current = null }
-  }, [enabledChannels.map((c) => c.id).join(',')])
+  }, [enabledChannels.map((c) => c.id).join(','), displayMode])
 
   // Push new data without rebuilding the plot
   useEffect(() => {
@@ -183,6 +190,37 @@ export function Oscilloscope() {
           <span style={{ color: '#8892A4', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
             TIME DOMAIN
           </span>
+          {/* display mode toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 1, borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+            {(['sampled', 'theoretical'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setDisplayMode(mode)}
+                style={{
+                  background: displayMode === mode ? '#1C2132' : 'transparent',
+                  color: displayMode === mode
+                    ? mode === 'theoretical' ? '#A78BFA' : '#7EB8F7'
+                    : '#4A5568',
+                  border: 'none',
+                  padding: '2px 8px',
+                  fontSize: 10,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  cursor: 'pointer',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  transition: 'all 150ms',
+                  userSelect: 'none',
+                }}
+              >
+                {mode === 'theoretical' ? 'ideal' : mode}
+              </button>
+            ))}
+          </div>
+          {displayMode === 'theoretical' && (
+            <span style={{ color: '#A78BFA', fontSize: 10, fontFamily: 'JetBrains Mono, monospace', opacity: 0.8 }}>
+              ∿ no noise
+            </span>
+          )}
           {enabledChannels.map((ch) => (
             <span key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 4, color: ch.color, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
               <span style={{ display: 'inline-block', width: 14, height: 2, background: ch.color, borderRadius: 1 }} />

@@ -2,6 +2,8 @@ export type WaveformType = 'sine' | 'square' | 'triangle' | 'sawtooth' | 'pulse'
 
 export type WindowType = 'rectangular' | 'hann' | 'hamming' | 'blackman' | 'flattop'
 
+export type DisplayMode = 'sampled' | 'theoretical'
+
 export interface WaveformConfig {
   type: WaveformType
   frequency: number   // Hz

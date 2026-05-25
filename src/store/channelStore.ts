@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Channel, GlobalConfig, SpectrumConfig, WaveformConfig } from '../types/waveform'
+import type { Channel, DisplayMode, GlobalConfig, SpectrumConfig, WaveformConfig } from '../types/waveform'
 
 export const CHANNEL_COLORS = ['#7EB8F7', '#F7C97E', '#7EF7B8', '#C07EF7'] as const
 
@@ -32,11 +32,13 @@ interface ChannelStore {
   spectrumConfig: SpectrumConfig
   activeChannelId: number
   activePlotTab: 'oscilloscope' | 'spectrum'
+  displayMode: DisplayMode
   paramPanelOpen: boolean
 
   updateChannel: (id: number, patch: Partial<WaveformConfig>) => void
   setActiveChannel: (id: number) => void
   setActivePlotTab: (tab: 'oscilloscope' | 'spectrum') => void
+  setDisplayMode: (mode: DisplayMode) => void
   updateGlobalConfig: (patch: Partial<GlobalConfig>) => void
   updateSpectrumConfig: (patch: Partial<SpectrumConfig>) => void
   toggleParamPanel: () => void
@@ -59,6 +61,7 @@ export const useChannelStore = create<ChannelStore>((set) => ({
 
   activeChannelId: 1,
   activePlotTab: 'oscilloscope',
+  displayMode: 'sampled',
   paramPanelOpen: true,
 
   updateChannel: (id, patch) =>
@@ -71,6 +74,8 @@ export const useChannelStore = create<ChannelStore>((set) => ({
   setActiveChannel: (id) => set({ activeChannelId: id }),
 
   setActivePlotTab: (tab) => set({ activePlotTab: tab }),
+
+  setDisplayMode: (mode) => set({ displayMode: mode }),
 
   updateGlobalConfig: (patch) =>
     set((s) => ({ globalConfig: { ...s.globalConfig, ...patch } })),
