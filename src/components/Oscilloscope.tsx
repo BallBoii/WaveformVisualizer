@@ -2,7 +2,11 @@ import { useEffect, useRef, useMemo, useState } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useChannelStore } from '../store/channelStore'
-import { generateSamples, generateTimeAxis } from '../core/waveform'
+import {
+  generateSamples, generateTimeAxis,
+  generateIdealSamples, generateIdealTimeAxis,
+  IDEAL_RESOLUTION,
+} from '../core/waveform'
 
 const GRID_STROKE = 'rgba(255,255,255,0.05)'
 const AXIS_STROKE = '#4A5568'
@@ -33,22 +37,46 @@ const btnBase: React.CSSProperties = {
 export function Oscilloscope() {
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
-  const { channels, globalConfig, displayMode, setDisplayMode } = useChannelStore()
+  const { channels, globalConfig } = useChannelStore()
 
   const enabledChannels = useMemo(() => channels.filter((ch) => ch.config.enabled), [channels])
+  const hasIdeal = useMemo(() => enabledChannels.some((ch) => ch.mode === 'ideal'), [enabledChannels])
 
   const plotData = useMemo((): uPlot.AlignedData => {
     const { sampleRate, recordLength } = globalConfig
+
+    if (hasIdeal) {
+      // Shared high-resolution time axis so ideal traces look smooth
+      const time = generateIdealTimeAxis(sampleRate, recordLength)
+      const dt_real = 1 / sampleRate
+      const series: (Float64Array | number[])[] = [time]
+
+      enabledChannels.forEach((ch) => {
+        if (ch.mode === 'ideal') {
+          series.push(generateIdealSamples(ch.config, sampleRate, recordLength))
+        } else {
+          // Sample-and-hold realistic channel onto the ideal time axis so the
+          // discrete staircase effect is visible even on the denser grid.
+          const real = generateSamples(ch.config, sampleRate, recordLength)
+          const resampled = new Float64Array(IDEAL_RESOLUTION)
+          for (let i = 0; i < IDEAL_RESOLUTION; i++) {
+            const idx = Math.min(recordLength - 1, Math.floor(time[i] / dt_real))
+            resampled[i] = real[idx]
+          }
+          series.push(resampled)
+        }
+      })
+      return series as uPlot.AlignedData
+    }
+
+    // All realistic — standard time axis
     const time = generateTimeAxis(sampleRate, recordLength)
     const series: (Float64Array | number[])[] = [time]
-    enabledChannels.forEach((ch) => {
-      const cfg = displayMode === 'theoretical'
-        ? { ...ch.config, noiseLevel: 0 }
-        : ch.config
-      series.push(generateSamples(cfg, sampleRate, recordLength))
-    })
+    enabledChannels.forEach((ch) =>
+      series.push(generateSamples(ch.config, sampleRate, recordLength))
+    )
     return series as uPlot.AlignedData
-  }, [enabledChannels, globalConfig, displayMode])
+  }, [enabledChannels, globalConfig, hasIdeal])
 
   // Zoom & pan — refs for stable closure access, state only for rendering
   const [xZoom, setXZoomState] = useState(1)
@@ -127,11 +155,11 @@ export function Oscilloscope() {
     ],
     series: [
       {},
-      ...enabledChannels.map((ch) =>
-        displayMode === 'theoretical'
-          ? { stroke: ch.color, width: 2, dash: [6, 3] }
-          : { stroke: ch.color, width: 1.5 }
-      ),
+      ...enabledChannels.map((ch) => ({
+        stroke: ch.color,
+        width: 1.5,
+        dash: ch.mode === 'ideal' ? [6, 3] : undefined,
+      })),
     ],
   })
 
@@ -167,7 +195,7 @@ export function Oscilloscope() {
     createOrResize(r.width, r.height)
 
     return () => { ro.disconnect(); plotInstance?.destroy(); plotRef.current = null }
-  }, [enabledChannels.map((c) => c.id).join(','), displayMode])
+  }, [enabledChannels.map((c) => `${c.id}:${c.mode}`).join(',')])
 
   // Push new data without rebuilding the plot
   useEffect(() => {
@@ -190,41 +218,12 @@ export function Oscilloscope() {
           <span style={{ color: '#8892A4', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
             TIME DOMAIN
           </span>
-          {/* display mode toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 1, borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
-            {(['sampled', 'theoretical'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setDisplayMode(mode)}
-                style={{
-                  background: displayMode === mode ? '#1C2132' : 'transparent',
-                  color: displayMode === mode
-                    ? mode === 'theoretical' ? '#A78BFA' : '#7EB8F7'
-                    : '#4A5568',
-                  border: 'none',
-                  padding: '2px 8px',
-                  fontSize: 10,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  cursor: 'pointer',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  transition: 'all 150ms',
-                  userSelect: 'none',
-                }}
-              >
-                {mode === 'theoretical' ? 'ideal' : mode}
-              </button>
-            ))}
-          </div>
-          {displayMode === 'theoretical' && (
-            <span style={{ color: '#A78BFA', fontSize: 10, fontFamily: 'JetBrains Mono, monospace', opacity: 0.8 }}>
-              ∿ no noise
-            </span>
-          )}
           {enabledChannels.map((ch) => (
             <span key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 4, color: ch.color, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
-              <span style={{ display: 'inline-block', width: 14, height: 2, background: ch.color, borderRadius: 1 }} />
-              {ch.label}
+              <span style={{ display: 'inline-block', width: 14, height: 2, background: ch.color, borderRadius: 1,
+                backgroundImage: ch.mode === 'ideal' ? `repeating-linear-gradient(90deg, ${ch.color} 0, ${ch.color} 6px, transparent 6px, transparent 9px)` : 'none',
+              }} />
+              {ch.label}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
             </span>
           ))}
         </div>

@@ -3,6 +3,7 @@ import { useChannelStore } from '../store/channelStore'
 import { generateSamples } from '../core/waveform'
 import { computeFFT } from '../core/fft'
 import { computeMetrics, fmt } from '../core/metrics'
+import { computeIdealMetrics } from '../core/idealMetrics'
 import type { SignalMetrics } from '../types/waveform'
 
 interface MetricCardProps {
@@ -40,7 +41,7 @@ function MetricCard({ label, value, color }: MetricCardProps) {
 
 interface MetricGroupProps {
   title: string
-  channel: { id: number; label: string; color: string }
+  channel: { id: number; label: string; color: string; mode: 'realistic' | 'ideal' }
   metrics: SignalMetrics
 }
 
@@ -63,6 +64,17 @@ function MetricGroup({ title, channel, metrics: m }: MetricGroupProps) {
           {channel.label}
         </span>
         <span style={{ color: '#4A5568', fontSize: 10 }}>{title}</span>
+        <span style={{
+          fontSize: 9,
+          fontFamily: 'JetBrains Mono, monospace',
+          color: channel.mode === 'ideal' ? '#7EF7B8' : '#4A5568',
+          background: channel.mode === 'ideal' ? 'rgba(126,247,184,0.1)' : 'rgba(255,255,255,0.05)',
+          border: `1px solid ${channel.mode === 'ideal' ? 'rgba(126,247,184,0.3)' : 'rgba(255,255,255,0.1)'}`,
+          borderRadius: 3,
+          padding: '1px 5px',
+        }}>
+          {channel.mode === 'ideal' ? 'IDEAL' : 'REAL'}
+        </span>
       </div>
       <div className="flex flex-wrap gap-2">
         <MetricCard label="Vpp" value={fmt(m.vpp, 'V')} color={color} />
@@ -89,6 +101,9 @@ export function MetricsPanel() {
   const allMetrics = useMemo(() => {
     const { sampleRate, recordLength } = globalConfig
     return enabledChannels.map((ch) => {
+      if (ch.mode === 'ideal') {
+        return { channel: ch, metrics: computeIdealMetrics(ch.config) }
+      }
       const samples = generateSamples(ch.config, sampleRate, recordLength)
       const { magnitude, frequency } = computeFFT(samples, sampleRate, spectrumConfig.windowType)
       return { channel: ch, metrics: computeMetrics(samples, sampleRate, magnitude, frequency) }

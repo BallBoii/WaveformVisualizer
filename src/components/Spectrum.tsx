@@ -4,6 +4,7 @@ import 'uplot/dist/uPlot.min.css'
 import { useChannelStore } from '../store/channelStore'
 import { generateSamples } from '../core/waveform'
 import { computeFFT } from '../core/fft'
+import { computeIdealSpectrum } from '../core/idealSpectrum'
 import type { WindowType } from '../types/waveform'
 
 const GRID_STROKE = 'rgba(255,255,255,0.05)'
@@ -35,17 +36,23 @@ export function Spectrum() {
     const { sampleRate, recordLength } = globalConfig
     const { windowType } = spectrumConfig
 
-    const firstFFT = enabledChannels.length > 0
-      ? computeFFT(generateSamples(enabledChannels[0].config, sampleRate, recordLength), sampleRate, windowType)
-      : null
+    // Always compute the FFT frequency axis from a reference channel (or global config)
+    const refSamples = enabledChannels.length > 0
+      ? generateSamples(enabledChannels[0].config, sampleRate, recordLength)
+      : new Float64Array(recordLength)
+    const refFFT = computeFFT(refSamples, sampleRate, windowType)
+    const freqAxis = refFFT.frequency
 
-    const freqAxis = firstFFT ? firstFFT.frequency : new Float64Array(0)
     const series: (Float64Array | number[])[] = [freqAxis]
 
     enabledChannels.forEach((ch) => {
-      const s = generateSamples(ch.config, sampleRate, recordLength)
-      const { magnitude } = computeFFT(s, sampleRate, windowType)
-      series.push(magnitude)
+      if (ch.mode === 'ideal') {
+        series.push(computeIdealSpectrum(ch.config, freqAxis))
+      } else {
+        const s = generateSamples(ch.config, sampleRate, recordLength)
+        const { magnitude } = computeFFT(s, sampleRate, windowType)
+        series.push(magnitude)
+      }
     })
 
     return series as uPlot.AlignedData
@@ -89,7 +96,8 @@ export function Spectrum() {
       ...enabledChannels.map((ch) => ({
         stroke: ch.color,
         width: 1.5,
-        fill: (u: uPlot) => {
+        dash: ch.mode === 'ideal' ? [6, 3] : undefined,
+        fill: ch.mode === 'ideal' ? undefined : (u: uPlot) => {
           const ctx = u.ctx
           const grad = ctx.createLinearGradient(0, 0, 0, u.height)
           grad.addColorStop(0, ch.color + '30')
@@ -136,7 +144,7 @@ export function Spectrum() {
       plotInstance?.destroy()
       plotRef.current = null
     }
-  }, [enabledChannels.map((c) => c.id).join(','), spectrumConfig.logScale])
+  }, [enabledChannels.map((c) => `${c.id}:${c.mode}`).join(','), spectrumConfig.logScale])
 
   useEffect(() => {
     plotRef.current?.setData(plotData)
@@ -160,7 +168,7 @@ export function Spectrum() {
                 className="flex items-center gap-1"
               >
                 <span style={{ display: 'inline-block', width: 16, height: 2, background: ch.color, borderRadius: 1, marginRight: 2 }} />
-                {ch.label}
+                {ch.label}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
               </span>
             ))}
           </div>

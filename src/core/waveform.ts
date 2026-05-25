@@ -62,3 +62,34 @@ export function generateTimeAxis(sampleRate: number, recordLength: number): Floa
   for (let i = 0; i < recordLength; i++) t[i] = i * dt
   return t
 }
+
+/** Fixed point count used for the ideal high-resolution render */
+export const IDEAL_RESOLUTION = 4096
+
+/**
+ * Generate a high-resolution, noise-free waveform for ideal mode.
+ * Always uses IDEAL_RESOLUTION sample points over the same time window
+ * as the realistic mode (duration = recordLength / sampleRate), so
+ * both modes cover an identical time span.
+ */
+export function generateIdealSamples(
+  config: WaveformConfig,
+  sampleRate: number,
+  recordLength: number,
+): Float64Array {
+  const duration = recordLength / sampleRate
+  const idealSR = IDEAL_RESOLUTION / duration
+  return generateSamples({ ...config, noiseLevel: 0 }, idealSR, IDEAL_RESOLUTION)
+}
+
+/**
+ * Time axis for the ideal render — IDEAL_RESOLUTION evenly-spaced points
+ * over the same duration as the realistic record window.
+ */
+export function generateIdealTimeAxis(sampleRate: number, recordLength: number): Float64Array {
+  const duration = recordLength / sampleRate
+  const dt = duration / (IDEAL_RESOLUTION - 1)
+  const t = new Float64Array(IDEAL_RESOLUTION)
+  for (let i = 0; i < IDEAL_RESOLUTION; i++) t[i] = i * dt
+  return t
+}

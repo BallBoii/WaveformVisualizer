@@ -68,10 +68,11 @@ type VoltUnit = typeof VOLT_UNITS[number]
 const VOLT_FACTORS: Record<VoltUnit, number> = { mV: 1e-3, V: 1 }
 
 function ChannelTab({ channelId }: { channelId: number }) {
-  const { channels, updateChannel } = useChannelStore()
+  const { channels, updateChannel, setChannelMode } = useChannelStore()
   const ch = channels.find((c) => c.id === channelId)!
   const cfg = ch.config
   const color = ch.color
+  const mode = ch.mode
 
   const [freqUnit, setFreqUnit] = useState<FreqUnit>('Hz')
   const [ampUnit, setAmpUnit]   = useState<VoltUnit>('V')
@@ -81,6 +82,31 @@ function ChannelTab({ channelId }: { channelId: number }) {
 
   return (
     <div className="flex flex-wrap items-end gap-5 px-4 py-3">
+      {/* Mode toggle */}
+      <Field label="Mode">
+        <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+          {(['realistic', 'ideal'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setChannelMode(channelId, m)}
+              style={{
+                background: mode === m ? (m === 'ideal' ? 'rgba(126,247,184,0.15)' : color + '22') : 'transparent',
+                color: mode === m ? (m === 'ideal' ? '#7EF7B8' : color) : '#4A5568',
+                border: 'none',
+                padding: '3px 10px',
+                fontSize: 11,
+                cursor: 'pointer',
+                fontFamily: 'JetBrains Mono, monospace',
+                transition: 'all 150ms',
+                borderRight: m === 'realistic' ? '1px solid rgba(255,255,255,0.1)' : 'none',
+              }}
+            >
+              {m === 'realistic' ? 'REAL' : 'IDEAL'}
+            </button>
+          ))}
+        </div>
+      </Field>
+
       {/* Enable toggle */}
       <Field label="Active">
         <button
