@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Channel, GlobalConfig, SpectrumConfig, WaveformConfig } from '../types/waveform'
+import type { Channel, GlobalConfig, ModulationConfig, SpectrumConfig, WaveformConfig } from '../types/waveform'
 
 export const CHANNEL_COLORS = ['#7EB8F7', '#F7C97E', '#7EF7B8', '#C07EF7'] as const
 
@@ -25,6 +25,12 @@ const makeChannel = (i: number): Channel => ({
     frequency: 1000,
     phase: i * 45,
   },
+  modulation: {
+    enabled: false,
+    type: 'AM',
+    sourceChannelId: i === 0 ? 2 : 1,
+    depth: 0.5,
+  },
 })
 
 interface ChannelStore {
@@ -37,6 +43,7 @@ interface ChannelStore {
 
   updateChannel: (id: number, patch: Partial<WaveformConfig>) => void
   setChannelMode: (id: number, mode: 'realistic' | 'ideal') => void
+  setModulation: (id: number, patch: Partial<ModulationConfig>) => void
   setActiveChannel: (id: number) => void
   setActivePlotTab: (tab: 'oscilloscope' | 'spectrum') => void
   updateGlobalConfig: (patch: Partial<GlobalConfig>) => void
@@ -73,6 +80,13 @@ export const useChannelStore = create<ChannelStore>((set) => ({
   setChannelMode: (id, mode) =>
     set((s) => ({
       channels: s.channels.map((ch) => (ch.id === id ? { ...ch, mode } : ch)),
+    })),
+
+  setModulation: (id, patch) =>
+    set((s) => ({
+      channels: s.channels.map((ch) =>
+        ch.id === id ? { ...ch, modulation: { ...ch.modulation, ...patch } } : ch,
+      ),
     })),
 
   setActiveChannel: (id) => set({ activeChannelId: id }),

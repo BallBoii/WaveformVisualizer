@@ -13,12 +13,22 @@ export interface WaveformConfig {
   enabled: boolean
 }
 
+export type ModulationType = 'AM' | 'FM' | 'PM' | 'PWM'
+
+export interface ModulationConfig {
+  enabled: boolean
+  type: ModulationType
+  sourceChannelId: number  // 1–4, references another channel
+  depth: number            // AM: 0–1 | FM: Hz deviation | PM: degrees | PWM: duty-swing %
+}
+
 export interface Channel {
   id: number
   label: string
   color: string
   config: WaveformConfig
   mode: 'realistic' | 'ideal'
+  modulation: ModulationConfig
 }
 
 export interface SignalMetrics {

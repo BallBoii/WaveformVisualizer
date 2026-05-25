@@ -2,9 +2,9 @@ import { useEffect, useRef, useMemo } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
 import { useChannelStore } from '../store/channelStore'
-import { generateSamples } from '../core/waveform'
 import { computeFFT } from '../core/fft'
 import { computeIdealSpectrum } from '../core/idealSpectrum'
+import { generateAllSamples, isChannelModulated } from '../core/modulation'
 import type { WindowType } from '../types/waveform'
 
 const GRID_STROKE = 'rgba(255,255,255,0.05)'
@@ -36,21 +36,26 @@ export function Spectrum() {
     const { sampleRate, recordLength } = globalConfig
     const { windowType } = spectrumConfig
 
-    // Always compute the FFT frequency axis from a reference channel (or global config)
-    const refSamples = enabledChannels.length > 0
-      ? generateSamples(enabledChannels[0].config, sampleRate, recordLength)
+    const { samples, sampleRate: effSR } = generateAllSamples(enabledChannels, sampleRate, recordLength)
+
+    // Build frequency axis from first channel's FFT
+    const firstId = enabledChannels[0]?.id
+    const refSamples = firstId != null
+      ? (samples.get(firstId) ?? new Float64Array(recordLength))
       : new Float64Array(recordLength)
-    const refFFT = computeFFT(refSamples, sampleRate, windowType)
+    const refFFT = computeFFT(refSamples, effSR, windowType)
     const freqAxis = refFFT.frequency
 
     const series: (Float64Array | number[])[] = [freqAxis]
 
     enabledChannels.forEach((ch) => {
-      if (ch.mode === 'ideal') {
+      const chSamples = samples.get(ch.id)!
+      if (ch.mode === 'ideal' && !isChannelModulated(ch, enabledChannels)) {
+        // Unmodulated ideal: analytical spectrum
         series.push(computeIdealSpectrum(ch.config, freqAxis))
       } else {
-        const s = generateSamples(ch.config, sampleRate, recordLength)
-        const { magnitude } = computeFFT(s, sampleRate, windowType)
+        // Realistic or modulated: sample-based FFT
+        const { magnitude } = computeFFT(chSamples, effSR, windowType)
         series.push(magnitude)
       }
     })
@@ -144,7 +149,7 @@ export function Spectrum() {
       plotInstance?.destroy()
       plotRef.current = null
     }
-  }, [enabledChannels.map((c) => `${c.id}:${c.mode}`).join(','), spectrumConfig.logScale])
+  }, [enabledChannels.map((c) => `${c.id}:${c.mode}:${c.modulation.enabled}:${c.modulation.type}:${c.modulation.sourceChannelId}`).join(','), spectrumConfig.logScale])
 
   useEffect(() => {
     plotRef.current?.setData(plotData)
@@ -161,16 +166,20 @@ export function Spectrum() {
             FREQUENCY DOMAIN
           </span>
           <div className="flex items-center gap-2">
-            {enabledChannels.map((ch) => (
-              <span
-                key={ch.id}
-                style={{ color: ch.color, fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}
-                className="flex items-center gap-1"
-              >
-                <span style={{ display: 'inline-block', width: 16, height: 2, background: ch.color, borderRadius: 1, marginRight: 2 }} />
-                {ch.label}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
-              </span>
-            ))}
+            {enabledChannels.map((ch) => {
+              const modulated = isChannelModulated(ch, enabledChannels)
+              const modTag = modulated ? ` [${ch.modulation.type}←${ch.modulation.sourceChannelId}]` : ''
+              return (
+                <span
+                  key={ch.id}
+                  style={{ color: ch.color, fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}
+                  className="flex items-center gap-1"
+                >
+                  <span style={{ display: 'inline-block', width: 16, height: 2, background: ch.color, borderRadius: 1, marginRight: 2 }} />
+                  {ch.label}{modTag}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
+                </span>
+              )
+            })}
           </div>
         </div>
 

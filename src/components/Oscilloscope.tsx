@@ -4,9 +4,10 @@ import 'uplot/dist/uPlot.min.css'
 import { useChannelStore } from '../store/channelStore'
 import {
   generateSamples, generateTimeAxis,
-  generateIdealSamples, generateIdealTimeAxis,
+  generateIdealTimeAxis,
   IDEAL_RESOLUTION,
 } from '../core/waveform'
+import { generateAllSamples, isChannelModulated } from '../core/modulation'
 
 const GRID_STROKE = 'rgba(255,255,255,0.05)'
 const AXIS_STROKE = '#4A5568'
@@ -44,6 +45,7 @@ export function Oscilloscope() {
 
   const plotData = useMemo((): uPlot.AlignedData => {
     const { sampleRate, recordLength } = globalConfig
+    const { samples } = generateAllSamples(enabledChannels, sampleRate, recordLength)
 
     if (hasIdeal) {
       // Shared high-resolution time axis so ideal traces look smooth
@@ -52,11 +54,11 @@ export function Oscilloscope() {
       const series: (Float64Array | number[])[] = [time]
 
       enabledChannels.forEach((ch) => {
-        if (ch.mode === 'ideal') {
-          series.push(generateIdealSamples(ch.config, sampleRate, recordLength))
+        if (ch.mode === 'ideal' || isChannelModulated(ch, enabledChannels)) {
+          // Ideal or modulated: use high-res samples from generateAllSamples
+          series.push(samples.get(ch.id)!)
         } else {
-          // Sample-and-hold realistic channel onto the ideal time axis so the
-          // discrete staircase effect is visible even on the denser grid.
+          // Unmodulated realistic: staircase sampling effect on ideal time axis
           const real = generateSamples(ch.config, sampleRate, recordLength)
           const resampled = new Float64Array(IDEAL_RESOLUTION)
           for (let i = 0; i < IDEAL_RESOLUTION; i++) {
@@ -72,9 +74,7 @@ export function Oscilloscope() {
     // All realistic — standard time axis
     const time = generateTimeAxis(sampleRate, recordLength)
     const series: (Float64Array | number[])[] = [time]
-    enabledChannels.forEach((ch) =>
-      series.push(generateSamples(ch.config, sampleRate, recordLength))
-    )
+    enabledChannels.forEach((ch) => series.push(samples.get(ch.id)!))
     return series as uPlot.AlignedData
   }, [enabledChannels, globalConfig, hasIdeal])
 
@@ -195,7 +195,7 @@ export function Oscilloscope() {
     createOrResize(r.width, r.height)
 
     return () => { ro.disconnect(); plotInstance?.destroy(); plotRef.current = null }
-  }, [enabledChannels.map((c) => `${c.id}:${c.mode}`).join(',')])
+  }, [enabledChannels.map((c) => `${c.id}:${c.mode}:${c.modulation.enabled}:${c.modulation.type}:${c.modulation.sourceChannelId}`).join(',')])
 
   // Push new data without rebuilding the plot
   useEffect(() => {
@@ -218,14 +218,18 @@ export function Oscilloscope() {
           <span style={{ color: '#8892A4', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
             TIME DOMAIN
           </span>
-          {enabledChannels.map((ch) => (
-            <span key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 4, color: ch.color, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
-              <span style={{ display: 'inline-block', width: 14, height: 2, background: ch.color, borderRadius: 1,
-                backgroundImage: ch.mode === 'ideal' ? `repeating-linear-gradient(90deg, ${ch.color} 0, ${ch.color} 6px, transparent 6px, transparent 9px)` : 'none',
-              }} />
-              {ch.label}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
-            </span>
-          ))}
+          {enabledChannels.map((ch) => {
+            const modulated = isChannelModulated(ch, enabledChannels)
+            const modTag = modulated ? ` [${ch.modulation.type}←${ch.modulation.sourceChannelId}]` : ''
+            return (
+              <span key={ch.id} style={{ display: 'flex', alignItems: 'center', gap: 4, color: ch.color, fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}>
+                <span style={{ display: 'inline-block', width: 14, height: 2, background: ch.color, borderRadius: 1,
+                  backgroundImage: ch.mode === 'ideal' ? `repeating-linear-gradient(90deg, ${ch.color} 0, ${ch.color} 6px, transparent 6px, transparent 9px)` : 'none',
+                }} />
+                {ch.label}{modTag}{ch.mode === 'ideal' && <span style={{ fontSize: 9, color: '#7EF7B8', marginLeft: 2 }}>✦</span>}
+              </span>
+            )
+          })}
         </div>
 
         {/* zoom / pan controls */}

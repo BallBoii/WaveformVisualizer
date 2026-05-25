@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import { useChannelStore } from '../store/channelStore'
-import type { WaveformType } from '../types/waveform'
+import type { ModulationType, WaveformType } from '../types/waveform'
 
 const WAVEFORM_TYPES: WaveformType[] = ['sine', 'square', 'triangle', 'sawtooth', 'pulse']
+const MOD_TYPES: ModulationType[] = ['AM', 'FM', 'PM', 'PWM']
+
+const DEFAULT_MOD_DEPTH: Record<ModulationType, number> = {
+  AM: 0.5,
+  FM: 1000,
+  PM: 90,
+  PWM: 25,
+}
 
 interface FieldProps {
   label: string
@@ -68,13 +76,15 @@ type VoltUnit = typeof VOLT_UNITS[number]
 const VOLT_FACTORS: Record<VoltUnit, number> = { mV: 1e-3, V: 1 }
 
 function ChannelTab({ channelId }: { channelId: number }) {
-  const { channels, updateChannel, setChannelMode } = useChannelStore()
+  const { channels, updateChannel, setChannelMode, setModulation } = useChannelStore()
   const ch = channels.find((c) => c.id === channelId)!
   const cfg = ch.config
   const color = ch.color
   const mode = ch.mode
+  const mod = ch.modulation
 
   const [freqUnit, setFreqUnit] = useState<FreqUnit>('Hz')
+  const [fmDevUnit, setFmDevUnit] = useState<FreqUnit>('Hz')
   const [ampUnit, setAmpUnit]   = useState<VoltUnit>('V')
   const [offUnit, setOffUnit]   = useState<VoltUnit>('V')
 
@@ -252,6 +262,148 @@ function ChannelTab({ channelId }: { channelId: number }) {
           style={{ '--thumb-color': color } as React.CSSProperties}
         />
       </Field>
+
+      {/* ── Modulation ───────────────────────────────────────────────────── */}
+      <div style={{ width: '100%', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 20 }}>
+          {/* Enable toggle */}
+          <Field label="Mod">
+            <button
+              onClick={() => setModulation(channelId, { enabled: !mod.enabled })}
+              style={{
+                background: mod.enabled ? 'rgba(192,126,247,0.15)' : 'transparent',
+                color: mod.enabled ? '#C07EF7' : '#4A5568',
+                border: `1px solid ${mod.enabled ? 'rgba(192,126,247,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                borderRadius: 4,
+                padding: '3px 12px',
+                fontSize: 12,
+                cursor: 'pointer',
+                fontFamily: 'JetBrains Mono, monospace',
+                transition: 'all 150ms',
+              }}
+            >
+              {mod.enabled ? 'ON' : 'OFF'}
+            </button>
+          </Field>
+
+          {mod.enabled && (
+            <>
+              {/* Modulation type */}
+              <Field label="Type">
+                <div style={{ display: 'flex', borderRadius: 4, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  {MOD_TYPES.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setModulation(channelId, { type: t, depth: DEFAULT_MOD_DEPTH[t] })}
+                      style={{
+                        background: mod.type === t ? 'rgba(192,126,247,0.15)' : 'transparent',
+                        color: mod.type === t ? '#C07EF7' : '#4A5568',
+                        border: 'none',
+                        borderRight: t !== 'PWM' ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                        padding: '3px 8px',
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        transition: 'all 150ms',
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              {/* Source channel */}
+              <Field label="Source">
+                <select
+                  value={mod.sourceChannelId}
+                  onChange={(e) => setModulation(channelId, { sourceChannelId: Number(e.target.value) })}
+                  style={{ ...selectStyle, width: 72 }}
+                >
+                  {channels
+                    .filter((c) => c.id !== channelId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                </select>
+              </Field>
+
+              {/* Depth — unit varies by type */}
+              {mod.type === 'AM' && (
+                <Field label="Depth (%)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={+(mod.depth * 100).toFixed(1)}
+                    onChange={(e) => setModulation(channelId, { depth: Number(e.target.value) / 100 })}
+                    style={{ ...inputStyle(color), width: 56 }}
+                    onFocus={(e) => (e.currentTarget.style.borderBottomColor = color)}
+                    onBlur={(e) => (e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.12)')}
+                  />
+                </Field>
+              )}
+
+              {mod.type === 'FM' && (
+                <Field label="Deviation">
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <input
+                      type="number"
+                      min={0}
+                      step={fmDevUnit === 'MHz' ? 0.001 : fmDevUnit === 'kHz' ? 0.1 : 100}
+                      value={+(mod.depth / FREQ_FACTORS[fmDevUnit]).toPrecision(5)}
+                      onChange={(e) => setModulation(channelId, { depth: Number(e.target.value) * FREQ_FACTORS[fmDevUnit] })}
+                      style={{ ...inputStyle(color), width: 64 }}
+                      onFocus={(e) => (e.currentTarget.style.borderBottomColor = color)}
+                      onBlur={(e) => (e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.12)')}
+                    />
+                    <select
+                      value={fmDevUnit}
+                      onChange={(e) => setFmDevUnit(e.target.value as FreqUnit)}
+                      style={unitSelectStyle}
+                    >
+                      {FREQ_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                </Field>
+              )}
+
+              {mod.type === 'PM' && (
+                <Field label="Phase Dev (°)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={360}
+                    step={15}
+                    value={mod.depth}
+                    onChange={(e) => setModulation(channelId, { depth: Number(e.target.value) })}
+                    style={{ ...inputStyle(color), width: 56 }}
+                    onFocus={(e) => (e.currentTarget.style.borderBottomColor = color)}
+                    onBlur={(e) => (e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.12)')}
+                  />
+                </Field>
+              )}
+
+              {mod.type === 'PWM' && (
+                <Field label="Swing (%)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={49}
+                    step={5}
+                    value={mod.depth}
+                    onChange={(e) => setModulation(channelId, { depth: Number(e.target.value) })}
+                    style={{ ...inputStyle(color), width: 56 }}
+                    onFocus={(e) => (e.currentTarget.style.borderBottomColor = color)}
+                    onBlur={(e) => (e.currentTarget.style.borderBottomColor = 'rgba(255,255,255,0.12)')}
+                  />
+                </Field>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
